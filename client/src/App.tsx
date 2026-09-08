@@ -171,9 +171,7 @@ export default function App() {
                   SIU Live
                 </span>
               </div>
-              {/* <p className="text-xs text-slate-500 mt-0.5">
-                Two-tier fraud screening with direct adjuster adjudication & settlement controls
-              </p> */}
+            
             </div>
           </div>
 
