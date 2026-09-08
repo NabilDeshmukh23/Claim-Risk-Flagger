@@ -47,6 +47,7 @@ export default function App() {
   const [actingId, setActingId] = useState<string | null>(null);
   const [expandedClaimId, setExpandedClaimId] = useState<string | null>(null);
   const [filter, setFilter] = useState<'pending' | 'analyzed' | 'approved' | 'escalated' | 'rejected' | 'all'>('pending');
+  const [sessionAnalyzedIds, setSessionAnalyzedIds] = useState<string[]>([]);
 
   useEffect(() => {
     loadClaims();
@@ -76,6 +77,11 @@ export default function App() {
     setLoading(false);
   }
 
+  function handleTabSwitch(nextTab: typeof filter) {
+    setFilter(nextTab);
+    setSessionAnalyzedIds([]);
+  }
+
   async function handleAnalyze(claimId: string) {
     setAnalyzingId(claimId);
     try {
@@ -85,6 +91,9 @@ export default function App() {
       const data = await res.json();
 
       if (data.success) {
+        // Pin the claim in the current view so it doesn't vanish
+        setSessionAnalyzedIds((prev) => [...prev, claimId]);
+
         setClaims((prev) =>
           prev.map((c) => {
             if (c.id === claimId) {
@@ -104,6 +113,7 @@ export default function App() {
             return c;
           })
         );
+        // Automatically open the evidence breakdown
         setExpandedClaimId(claimId);
       }
     } catch (err) {
@@ -125,6 +135,9 @@ export default function App() {
       const data = await res.json();
 
       if (data.success) {
+        // Remove from session hold so it moves into its settled tab
+        setSessionAnalyzedIds((prev) => prev.filter((id) => id !== claimId));
+
         setClaims((prev) =>
           prev.map((c) => (c.id === claimId ? { ...c, status: decision } : c))
         );
@@ -146,8 +159,12 @@ export default function App() {
     .filter((c) => c.status === 'rejected' || c.status === 'escalated')
     .reduce((sum, c) => sum + Number(c.claimed_amount), 0);
 
+  // Retain freshly analyzed claims on screen even if still in 'pending' tab
   const visibleClaims = claims.filter((c) => {
     if (filter === 'all') return true;
+    if (filter === 'pending') {
+      return c.status === 'pending' || sessionAnalyzedIds.includes(c.id);
+    }
     return c.status === filter;
   });
 
@@ -170,7 +187,9 @@ export default function App() {
                   SIU Live
                 </span>
               </div>
-            
+              <p className="text-xs text-slate-500 mt-0.5">
+                Two-tier fraud screening with direct adjuster adjudication & settlement controls
+              </p>
             </div>
           </div>
 
@@ -204,7 +223,7 @@ export default function App() {
             <div className="text-2xl font-extrabold text-slate-900 mt-2">
               {claims.filter((c) => c.status === 'analyzed').length}
             </div>
-            <p className="text-[11px] text-slate-500 mt-0.5">AI evaluated, awaiting human sign-off</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">AI evaluated, awaiting sign-off</p>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -233,7 +252,7 @@ export default function App() {
         {/* Lifecycle Tabs */}
         <div className="flex items-center overflow-x-auto no-scrollbar bg-slate-100 border border-slate-200 rounded-xl p-1 text-xs font-medium w-full">
           <button
-            onClick={() => setFilter('pending')}
+            onClick={() => handleTabSwitch('pending')}
             className={`px-3.5 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
               filter === 'pending' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'
             }`}
@@ -242,7 +261,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setFilter('analyzed')}
+            onClick={() => handleTabSwitch('analyzed')}
             className={`px-3.5 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
               filter === 'analyzed' ? 'bg-amber-100/70 text-amber-900 border border-amber-200 font-semibold' : 'text-slate-600 hover:text-slate-900'
             }`}
@@ -251,7 +270,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setFilter('approved')}
+            onClick={() => handleTabSwitch('approved')}
             className={`px-3.5 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
               filter === 'approved' ? 'bg-emerald-100/70 text-emerald-900 border border-emerald-200 font-semibold' : 'text-slate-600 hover:text-slate-900'
             }`}
@@ -260,7 +279,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setFilter('escalated')}
+            onClick={() => handleTabSwitch('escalated')}
             className={`px-3.5 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
               filter === 'escalated' ? 'bg-indigo-100/70 text-indigo-900 border border-indigo-200 font-semibold' : 'text-slate-600 hover:text-slate-900'
             }`}
@@ -269,7 +288,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setFilter('rejected')}
+            onClick={() => handleTabSwitch('rejected')}
             className={`px-3.5 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
               filter === 'rejected' ? 'bg-rose-100/70 text-rose-900 border border-rose-200 font-semibold' : 'text-slate-600 hover:text-slate-900'
             }`}
@@ -278,7 +297,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setFilter('all')}
+            onClick={() => handleTabSwitch('all')}
             className={`px-3.5 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
               filter === 'all' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'
             }`}
@@ -316,14 +335,28 @@ export default function App() {
                     const isActing = actingId === claim.id;
                     const isExpanded = expandedClaimId === claim.id;
                     const assessment = claim.assessment;
+                    const wasJustAnalyzed = sessionAnalyzedIds.includes(claim.id);
 
                     return (
                       <React.Fragment key={claim.id}>
-                        <tr className={`transition-colors ${isExpanded ? 'bg-slate-50' : 'hover:bg-slate-50/70'}`}>
+                        <tr className={`transition-colors ${
+                          wasJustAnalyzed 
+                            ? 'bg-indigo-50/50 border-l-4 border-indigo-600' 
+                            : isExpanded 
+                            ? 'bg-slate-50' 
+                            : 'hover:bg-slate-50/70'
+                        }`}>
                           
                           {/* Claimant */}
                           <td className="py-4 px-5 align-top">
-                            <div className="font-semibold text-slate-900">{claim.customer_name}</div>
+                            <div className="font-semibold text-slate-900 flex items-center space-x-2">
+                              <span>{claim.customer_name}</span>
+                              {wasJustAnalyzed && (
+                                <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200">
+                                  Just Screened
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[11px] text-slate-500 flex items-center space-x-1.5 mt-0.5">
                               <Car className="h-3.5 w-3.5 text-slate-400" />
                               <span>{claim.vehicle_info}</span>
