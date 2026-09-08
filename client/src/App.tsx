@@ -10,8 +10,12 @@ import {
   CalendarClock, 
   RefreshCw,
   Search,
+  Check,
+  XCircle,
+  AlertOctagon,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  DollarSign
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
@@ -24,7 +28,7 @@ interface Claim {
   description: string;
   claimed_amount: number;
   incident_type: string;
-  status: 'pending' | 'analyzed';
+  status: 'pending' | 'analyzed' | 'approved' | 'escalated' | 'rejected';
   assessment?: {
     risk_level: 'Low' | 'Medium' | 'High';
     reasoning: string;
@@ -41,9 +45,9 @@ export default function App() {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [actingId, setActingId] = useState<string | null>(null);
   const [expandedClaimId, setExpandedClaimId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'pending' | 'high' | 'medium' | 'low' | 'all'>('pending');
-  const [sessionAnalyzedIds, setSessionAnalyzedIds] = useState<string[]>([]);
+  const [filter, setFilter] = useState<'pending' | 'analyzed' | 'approved' | 'escalated' | 'rejected' | 'all'>('pending');
 
   useEffect(() => {
     loadClaims();
@@ -73,11 +77,6 @@ export default function App() {
     setLoading(false);
   }
 
-  function handleTabSwitch(nextTab: typeof filter) {
-    setFilter(nextTab);
-    setSessionAnalyzedIds([]);
-  }
-
   async function handleAnalyze(claimId: string) {
     setAnalyzingId(claimId);
     try {
@@ -87,8 +86,6 @@ export default function App() {
       const data = await res.json();
 
       if (data.success) {
-        setSessionAnalyzedIds((prev) => [...prev, claimId]);
-
         setClaims((prev) =>
           prev.map((c) => {
             if (c.id === claimId) {
@@ -118,192 +115,287 @@ export default function App() {
     }
   }
 
-  const visibleClaims = claims.filter((c) => {
-    if (filter === 'pending') {
-      return c.status === 'pending' || sessionAnalyzedIds.includes(c.id);
+  async function handleDecision(claimId: string, decision: 'approved' | 'escalated' | 'rejected') {
+    setActingId(claimId);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/claim-decision/${claimId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setClaims((prev) =>
+          prev.map((c) => (c.id === claimId ? { ...c, status: decision } : c))
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update decision');
+    } finally {
+      setActingId(null);
     }
-    if (filter === 'high') return c.assessment?.risk_level === 'High';
-    if (filter === 'medium') return c.assessment?.risk_level === 'Medium';
-    if (filter === 'low') return c.assessment?.risk_level === 'Low';
-    return true;
+  }
+
+  // Calculate Operational Metrics
+  const totalApprovedAmount = claims
+    .filter((c) => c.status === 'approved')
+    .reduce((sum, c) => sum + Number(c.claimed_amount), 0);
+
+  const totalPreventedAmount = claims
+    .filter((c) => c.status === 'rejected' || c.status === 'escalated')
+    .reduce((sum, c) => sum + Number(c.claimed_amount), 0);
+
+  const visibleClaims = claims.filter((c) => {
+    if (filter === 'all') return true;
+    return c.status === filter;
   });
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 sm:p-6 md:p-10 antialiased">
-      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
+      <div className="max-w-7xl mx-auto space-y-6">
 
-        {/* Header Section */}
-        <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+        {/* Top Header */}
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center space-x-3.5">
-            <div className="h-10 w-10 sm:h-11 sm:w-11 shrink-0 rounded-xl bg-gradient-to-tr from-rose-600 to-rose-500 flex items-center justify-center shadow-md shadow-rose-500/20 text-white">
-              <ShieldAlert className="h-5 w-5 sm:h-6 sm:w-6" />
+            <div className="h-11 w-11 shrink-0 rounded-xl bg-gradient-to-tr from-rose-600 to-rose-500 flex items-center justify-center shadow-md shadow-rose-500/20 text-white">
+              <ShieldAlert className="h-6 w-6" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900">
-                  Claims Fraud Risk Flagger
+                <h1 className="text-xl font-bold tracking-tight text-slate-900">
+                  Motor Claims Decision Portal
                 </h1>
-                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap">
-                  Live Engine
+                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold px-2 py-0.5 rounded-full">
+                  SIU Live
                 </span>
               </div>
-              
+              {/* <p className="text-xs text-slate-500 mt-0.5">
+                Two-tier fraud screening with direct adjuster adjudication & settlement controls
+              </p> */}
             </div>
           </div>
 
-          {/* Filter Bar & Controls */}
-          <div className="flex items-center gap-2 w-full lg:w-auto">
-            <div className="flex items-center overflow-x-auto no-scrollbar bg-slate-100/80 border border-slate-200 rounded-xl p-1 text-xs font-medium w-full lg:w-auto">
-              <button
-                onClick={() => handleTabSwitch('pending')}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
-                  filter === 'pending'
-                    ? 'bg-white text-slate-900 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Pending ({claims.filter((c) => c.status === 'pending').length})
-              </button>
-
-              <button
-                onClick={() => handleTabSwitch('high')}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
-                  filter === 'high'
-                    ? 'bg-rose-50 text-rose-700 border border-rose-200 font-semibold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                High ({claims.filter((c) => c.assessment?.risk_level === 'High').length})
-              </button>
-
-              <button
-                onClick={() => handleTabSwitch('medium')}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
-                  filter === 'medium'
-                    ? 'bg-amber-50 text-amber-700 border border-amber-200 font-semibold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Med ({claims.filter((c) => c.assessment?.risk_level === 'Medium').length})
-              </button>
-
-              <button
-                onClick={() => handleTabSwitch('low')}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
-                  filter === 'low'
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Low ({claims.filter((c) => c.assessment?.risk_level === 'Low').length})
-              </button>
-
-              <button
-                onClick={() => handleTabSwitch('all')}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
-                  filter === 'all'
-                    ? 'bg-white text-slate-900 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                All ({claims.length})
-              </button>
-            </div>
-
-            <button
-              onClick={loadClaims}
-              className="p-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-900 rounded-xl shadow-xs transition shrink-0"
-              title="Refresh Records"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </button>
-          </div>
+          <button
+            onClick={loadClaims}
+            className="flex items-center space-x-2 px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl shadow-xs transition w-fit"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>Sync Claims</span>
+          </button>
         </header>
 
-        {/* Content Area */}
-        {loading ? (
-          <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center text-slate-500 text-sm flex flex-col items-center justify-center space-y-2">
-            <span className="h-5 w-5 border-2 border-slate-300 border-t-slate-700 rounded-full animate-spin" />
-            <p>Loading claims data from Supabase...</p>
+        {/* Executive KPI Summary Strip */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase">
+              <span>Pending Screening</span>
+              <Clock className="h-4 w-4 text-slate-400" />
+            </div>
+            <div className="text-2xl font-extrabold text-slate-900 mt-2">
+              {claims.filter((c) => c.status === 'pending').length}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">Unanalyzed submissions</p>
           </div>
-        ) : visibleClaims.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 text-sm">
-            No claims found under this filter.
+
+          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div className="flex items-center justify-between text-amber-600 text-xs font-semibold uppercase">
+              <span>Awaiting Decision</span>
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+            </div>
+            <div className="text-2xl font-extrabold text-slate-900 mt-2">
+              {claims.filter((c) => c.status === 'analyzed').length}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">AI evaluated, awaiting human sign-off</p>
           </div>
-        ) : (
-          <>
-            {/* Desktop / Tablet View (Table Layout) */}
-            <div className="hidden md:block bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
-                      <th className="py-3.5 px-5">Claimant & Vehicle</th>
-                      <th className="py-3.5 px-5">Type & Incident</th>
-                      <th className="py-3.5 px-5">Claimed Amount</th>
-                      <th className="py-3.5 px-5">Timeline</th>
-                      <th className="py-3.5 px-5">Risk Status</th>
-                      <th className="py-3.5 px-5 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {visibleClaims.map((claim) => {
-                      const isAnalyzing = analyzingId === claim.id;
-                      const isExpanded = expandedClaimId === claim.id;
-                      const assessment = claim.assessment;
-                      const wasJustAnalyzed = sessionAnalyzedIds.includes(claim.id);
 
-                      return (
-                        <React.Fragment key={claim.id}>
-                          <tr
-                            className={`transition-colors ${
-                              wasJustAnalyzed
-                                ? 'bg-indigo-50/60 border-l-4 border-indigo-600'
-                                : isExpanded
-                                ? 'bg-slate-50'
-                                : 'hover:bg-slate-50/70'
-                            }`}
-                          >
-                            <td className="py-4 px-5">
-                              <div className="font-semibold text-slate-900 flex items-center space-x-2">
-                                <span>{claim.customer_name}</span>
-                                {wasJustAnalyzed && (
-                                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-md border border-indigo-200">
-                                    Just Evaluated
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-[11px] text-slate-500 flex items-center space-x-1.5 mt-0.5">
-                                <Car className="h-3.5 w-3.5 text-slate-400" />
-                                <span>{claim.vehicle_info}</span>
-                              </div>
-                            </td>
+          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div className="flex items-center justify-between text-emerald-600 text-xs font-semibold uppercase">
+              <span>Settled (Approved)</span>
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            </div>
+            <div className="text-2xl font-extrabold text-emerald-700 mt-2">
+              {totalApprovedAmount.toLocaleString()} <span className="text-sm font-bold text-emerald-600">AED</span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">{claims.filter((c) => c.status === 'approved').length} claims approved for payout</p>
+          </div>
 
-                            <td className="py-4 px-5 min-w-[320px] max-w-md">
-                              <span className="inline-block px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-700 uppercase tracking-wide">
-                                {claim.incident_type}
-                              </span>
-                              <p className="text-[11px] text-slate-700 leading-relaxed mt-1.5 whitespace-normal break-words">
-                                {claim.description}
-                              </p>
-                            </td>
+          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div className="flex items-center justify-between text-rose-600 text-xs font-semibold uppercase">
+              <span>Fraud Intercepted</span>
+              <ShieldAlert className="h-4 w-4 text-rose-500" />
+            </div>
+            <div className="text-2xl font-extrabold text-rose-700 mt-2">
+              {totalPreventedAmount.toLocaleString()} <span className="text-sm font-bold text-rose-600">AED</span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">Blocked via rejection or SIU referral</p>
+          </div>
+        </div>
 
-                            <td className="py-4 px-5">
-                              <span className="font-bold text-slate-900 text-sm">
-                                {Number(claim.claimed_amount).toLocaleString()}{' '}
-                                <span className="text-xs font-semibold text-slate-500">AED</span>
-                              </span>
-                            </td>
+        {/* Lifecycle Tabs */}
+        <div className="flex items-center overflow-x-auto no-scrollbar bg-slate-100 border border-slate-200 rounded-xl p-1 text-xs font-medium w-full">
+          <button
+            onClick={() => setFilter('pending')}
+            className={`px-3.5 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
+              filter === 'pending' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Pending Screening ({claims.filter((c) => c.status === 'pending').length})
+          </button>
 
-                            <td className="py-4 px-5 text-slate-600 space-y-0.5 text-[11px]">
-                              <div>Incident: <span className="text-slate-900 font-medium">{claim.incident_date}</span></div>
-                              <div className="text-slate-400">Policy: {claim.policy_start_date}</div>
-                            </td>
+          <button
+            onClick={() => setFilter('analyzed')}
+            className={`px-3.5 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
+              filter === 'analyzed' ? 'bg-amber-100/70 text-amber-900 border border-amber-200 font-semibold' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Needs Decision ({claims.filter((c) => c.status === 'analyzed').length})
+          </button>
 
-                            <td className="py-4 px-5">
-                              {assessment ? (
+          <button
+            onClick={() => setFilter('approved')}
+            className={`px-3.5 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
+              filter === 'approved' ? 'bg-emerald-100/70 text-emerald-900 border border-emerald-200 font-semibold' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Approved ({claims.filter((c) => c.status === 'approved').length})
+          </button>
+
+          <button
+            onClick={() => setFilter('escalated')}
+            className={`px-3.5 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
+              filter === 'escalated' ? 'bg-indigo-100/70 text-indigo-900 border border-indigo-200 font-semibold' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Escalated to SIU ({claims.filter((c) => c.status === 'escalated').length})
+          </button>
+
+          <button
+            onClick={() => setFilter('rejected')}
+            className={`px-3.5 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
+              filter === 'rejected' ? 'bg-rose-100/70 text-rose-900 border border-rose-200 font-semibold' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Rejected ({claims.filter((c) => c.status === 'rejected').length})
+          </button>
+
+          <button
+            onClick={() => setFilter('all')}
+            className={`px-3.5 py-1.5 rounded-lg whitespace-nowrap transition shrink-0 ${
+              filter === 'all' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Full Ledger ({claims.length})
+          </button>
+        </div>
+
+        {/* Claims Table Container */}
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+          {loading ? (
+            <div className="p-16 text-center text-slate-500 text-sm flex flex-col items-center justify-center space-y-2">
+              <span className="h-5 w-5 border-2 border-slate-300 border-t-slate-700 rounded-full animate-spin" />
+              <p>Loading claims data from Supabase...</p>
+            </div>
+          ) : visibleClaims.length === 0 ? (
+            <div className="p-12 text-center text-slate-500 text-sm">
+              No claims currently in this status queue.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
+                    <th className="py-3.5 px-5">Claimant & Vehicle</th>
+                    <th className="py-3.5 px-5">Incident Narrative</th>
+                    <th className="py-3.5 px-5">Amount</th>
+                    <th className="py-3.5 px-5">Status & Risk</th>
+                    <th className="py-3.5 px-5 text-right">Workflow Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {visibleClaims.map((claim) => {
+                    const isAnalyzing = analyzingId === claim.id;
+                    const isActing = actingId === claim.id;
+                    const isExpanded = expandedClaimId === claim.id;
+                    const assessment = claim.assessment;
+
+                    return (
+                      <React.Fragment key={claim.id}>
+                        <tr className={`transition-colors ${isExpanded ? 'bg-slate-50' : 'hover:bg-slate-50/70'}`}>
+                          
+                          {/* Claimant */}
+                          <td className="py-4 px-5 align-top">
+                            <div className="font-semibold text-slate-900">{claim.customer_name}</div>
+                            <div className="text-[11px] text-slate-500 flex items-center space-x-1.5 mt-0.5">
+                              <Car className="h-3.5 w-3.5 text-slate-400" />
+                              <span>{claim.vehicle_info}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-1">
+                              Policy: {claim.policy_start_date}
+                            </div>
+                          </td>
+
+                          {/* Narrative */}
+                          <td className="py-4 px-5 min-w-[300px] max-w-md align-top">
+                            <span className="inline-block px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-700 uppercase">
+                              {claim.incident_type}
+                            </span>
+                            <p className="text-[11px] text-slate-700 leading-relaxed mt-1.5 whitespace-normal break-words">
+                              {claim.description}
+                            </p>
+                            <div className="text-[10px] text-slate-400 mt-1">
+                              Incident Date: <span className="font-medium text-slate-600">{claim.incident_date}</span>
+                            </div>
+                          </td>
+
+                          {/* Amount */}
+                          <td className="py-4 px-5 align-top">
+                            <span className="font-extrabold text-slate-900 text-sm">
+                              {Number(claim.claimed_amount).toLocaleString()} <span className="text-xs font-semibold text-slate-500">AED</span>
+                            </span>
+                          </td>
+
+                          {/* Lifecycle Status & Risk Badge */}
+                          <td className="py-4 px-5 align-top space-y-1.5">
+                            <div>
+                              {claim.status === 'pending' && (
+                                <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                  <Clock className="h-3 w-3 text-slate-400" />
+                                  <span>Pending Screening</span>
+                                </span>
+                              )}
+                              {claim.status === 'analyzed' && (
+                                <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                  <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                  <span>Needs Decision</span>
+                                </span>
+                              )}
+                              {claim.status === 'approved' && (
+                                <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                  <Check className="h-3 w-3 text-emerald-600" />
+                                  <span>Settlement Approved</span>
+                                </span>
+                              )}
+                              {claim.status === 'escalated' && (
+                                <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                                  <AlertOctagon className="h-3 w-3 text-indigo-600" />
+                                  <span>Escalated to SIU</span>
+                                </span>
+                              )}
+                              {claim.status === 'rejected' && (
+                                <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-800 border border-rose-200">
+                                  <XCircle className="h-3 w-3 text-rose-600" />
+                                  <span>Claim Rejected</span>
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Risk Flag if Analyzed */}
+                            {assessment && (
+                              <div>
                                 <span
-                                  className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${
+                                  className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
                                     assessment.risk_level === 'High'
                                       ? 'bg-rose-50 border-rose-200 text-rose-700'
                                       : assessment.risk_level === 'Medium'
@@ -311,299 +403,158 @@ export default function App() {
                                       : 'bg-emerald-50 border-emerald-200 text-emerald-700'
                                   }`}
                                 >
-                                  {assessment.risk_level === 'High' && <AlertTriangle className="h-3.5 w-3.5 text-rose-600" />}
-                                  {assessment.risk_level === 'Medium' && <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />}
-                                  {assessment.risk_level === 'Low' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />}
-                                  <span>{assessment.risk_level} Risk</span>
+                                  <span>{assessment.risk_level} Fraud Risk</span>
                                 </span>
-                              ) : (
-                                <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                                  <Clock className="h-3 w-3 text-slate-400" />
-                                  <span>Pending</span>
-                                </span>
-                              )}
-                            </td>
+                              </div>
+                            )}
+                          </td>
 
-                            <td className="py-4 px-5 text-right">
-                              {assessment ? (
-                                <button
-                                  onClick={() => setExpandedClaimId(isExpanded ? null : claim.id)}
-                                  className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-50/80 transition"
-                                >
-                                  {isExpanded ? 'Hide Breakdown' : 'View Signals'}
-                                </button>
-                              ) : claim.status === 'analyzed' ? (
-                                <span className="text-[11px] text-slate-400 italic pr-2">Historical</span>
-                              ) : (
-                                <button
-                                  onClick={() => handleAnalyze(claim.id)}
-                                  disabled={isAnalyzing}
-                                  className="bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-semibold text-xs px-3.5 py-1.5 rounded-lg shadow-xs shadow-rose-600/10 transition inline-flex items-center space-x-1.5"
-                                >
-                                  {isAnalyzing ? (
-                                    <>
-                                      <span className="h-3 w-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                                      <span>Screening...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Search className="h-3.5 w-3.5" />
-                                      <span>Analyze</span>
-                                    </>
-                                  )}
-                                </button>
-                              )}
-                            </td>
-                          </tr>
+                          {/* Action Column */}
+                          <td className="py-4 px-5 text-right align-top space-y-2">
+                            {claim.status === 'pending' ? (
+                              <button
+                                onClick={() => handleAnalyze(claim.id)}
+                                disabled={isAnalyzing}
+                                className="bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-semibold text-xs px-3.5 py-1.5 rounded-lg shadow-xs transition inline-flex items-center space-x-1.5"
+                              >
+                                {isAnalyzing ? (
+                                  <>
+                                    <span className="h-3 w-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                    <span>Screening...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Search className="h-3.5 w-3.5" />
+                                    <span>Run AI Screen</span>
+                                  </>
+                                )}
+                              </button>
+                            ) : (
+                              <div className="flex flex-col items-end space-y-1.5">
+                                {/* Decision Buttons for Analyzed Claims */}
+                                {claim.status === 'analyzed' && (
+                                  <div className="flex items-center space-x-1.5">
+                                    <button
+                                      onClick={() => handleDecision(claim.id, 'approved')}
+                                      disabled={isActing}
+                                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] rounded-md shadow-xs transition flex items-center space-x-1"
+                                      title="Approve Settlement"
+                                    >
+                                      <Check className="h-3 w-3" />
+                                      <span>Approve</span>
+                                    </button>
 
-                          {/* Expanded Telemetry Drawer */}
-                          {isExpanded && assessment && (
-                            <tr className="bg-slate-50/90 border-y border-slate-200">
-                              <td colSpan={6} className="p-6">
-                                <div className="space-y-4 max-w-5xl mx-auto">
+                                    <button
+                                      onClick={() => handleDecision(claim.id, 'escalated')}
+                                      disabled={isActing}
+                                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-[11px] rounded-md shadow-xs transition flex items-center space-x-1"
+                                      title="Refer to Special Investigation Unit"
+                                    >
+                                      <AlertOctagon className="h-3 w-3" />
+                                      <span>SIU</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => handleDecision(claim.id, 'rejected')}
+                                      disabled={isActing}
+                                      className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-[11px] rounded-md shadow-xs transition flex items-center space-x-1"
+                                      title="Reject Claim"
+                                    >
+                                      <XCircle className="h-3 w-3" />
+                                      <span>Reject</span>
+                                    </button>
+                                  </div>
+                                )}
+
+                                {assessment && (
+                                  <button
+                                    onClick={() => setExpandedClaimId(isExpanded ? null : claim.id)}
+                                    className="text-[11px] text-slate-600 hover:text-slate-900 font-semibold px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 transition flex items-center space-x-1"
+                                  >
+                                    <span>{isExpanded ? 'Hide Evidence' : 'View Evidence'}</span>
+                                    {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </td>
+
+                        </tr>
+
+                        {/* Expandable Evidence Drawer */}
+                        {isExpanded && assessment && (
+                          <tr className="bg-slate-50/90 border-y border-slate-200">
+                            <td colSpan={5} className="p-6">
+                              <div className="space-y-4 max-w-5xl mx-auto">
+                                
+                                <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
+                                  <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1.5">
+                                    <span className="h-2 w-2 rounded-full bg-rose-500" />
+                                    <span>Gemini Audit Synthesis</span>
+                                  </div>
+                                  <p className="text-xs text-slate-700 leading-relaxed font-normal">
+                                    {assessment.reasoning}
+                                  </p>
+                                </div>
+
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
                                   <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
-                                    <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1.5">
-                                      <span className="h-2 w-2 rounded-full bg-rose-500" />
-                                      <span>Risk</span>
+                                    <div className="flex items-center space-x-1.5 text-slate-500 text-[10px] uppercase font-bold">
+                                      <History className="h-3.5 w-3.5 text-indigo-600" />
+                                      <span>Recent Claims</span>
                                     </div>
-                                    <p className="text-xs text-slate-700 leading-relaxed">
-                                      {assessment.reasoning}
-                                    </p>
+                                    <div className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
+                                      {assessment.recent_claim_count} {assessment.recent_claim_count === 1 ? 'claim' : 'claims'}
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 mt-0.5 truncate">Filed in last 6 months</p>
                                   </div>
 
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-                                    <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
-                                      <div className="flex items-center space-x-1.5 text-slate-500 text-[10px] uppercase font-bold">
-                                        <History className="h-3.5 w-3.5 text-indigo-600" />
-                                        <span>Recent Claims (6 Mos)</span>
-                                      </div>
-                                      <div className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
-                                        {assessment.recent_claim_count} {assessment.recent_claim_count === 1 ? 'claim' : 'claims'}
-                                      </div>
-                                      <p className="text-[11px] text-slate-500 mt-0.5 truncate">{claim.customer_name}</p>
+                                  <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
+                                    <div className="flex items-center space-x-1.5 text-slate-500 text-[10px] uppercase font-bold">
+                                      <TrendingUp className="h-3.5 w-3.5 text-amber-600" />
+                                      <span>Typical Cost</span>
                                     </div>
+                                    <div className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
+                                      {assessment.avg_amount_similar_type.toLocaleString()} <span className="text-xs font-semibold text-slate-500">AED</span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 mt-0.5 truncate">Normal for {claim.incident_type}</p>
+                                  </div>
 
-                                    <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
-                                      <div className="flex items-center space-x-1.5 text-slate-500 text-[10px] uppercase font-bold">
-                                        <TrendingUp className="h-3.5 w-3.5 text-amber-600" />
-                                        <span>Typical Repair Cost</span>
-                                      </div>
-                                      <div className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
-                                        {assessment.avg_amount_similar_type.toLocaleString()} <span className="text-xs font-semibold text-slate-500">AED</span>
-                                      </div>
-                                      <p className="text-[11px] text-slate-500 mt-0.5 truncate">{claim.incident_type}</p>
+                                  <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
+                                    <div className="flex items-center space-x-1.5 text-slate-500 text-[10px] uppercase font-bold">
+                                      <TrendingUp className="h-3.5 w-3.5 text-rose-600" />
+                                      <span>Price Difference</span>
                                     </div>
+                                    <div className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
+                                      {assessment.amount_vs_avg_ratio}x higher
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 mt-0.5">Than average claim</p>
+                                  </div>
 
-                                    <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
-                                      <div className="flex items-center space-x-1.5 text-slate-500 text-[10px] uppercase font-bold">
-                                        <TrendingUp className="h-3.5 w-3.5 text-rose-600" />
-                                        <span>Price Difference</span>
-                                      </div>
-                                      <div className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
-                                        {assessment.amount_vs_avg_ratio}x
-                                      </div>
-                                      <p className="text-[11px] text-slate-500 mt-0.5">Historical multiple</p>
+                                  <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
+                                    <div className="flex items-center space-x-1.5 text-slate-500 text-[10px] uppercase font-bold">
+                                      <CalendarClock className="h-3.5 w-3.5 text-emerald-600" />
+                                      <span>Policy Age</span>
                                     </div>
-
-                                    <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
-                                      <div className="flex items-center space-x-1.5 text-slate-500 text-[10px] uppercase font-bold">
-                                        <CalendarClock className="h-3.5 w-3.5 text-emerald-600" />
-                                        <span> Days Since Policy Started</span>
-                                      </div>
-                                      <div className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
-                                        {assessment.days_since_policy_start} days
-                                      </div>
-                                      <p className="text-[11px] text-slate-500 mt-0.5">Policy to incident</p>
+                                    <div className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
+                                      {assessment.days_since_policy_start} days old
                                     </div>
+                                    <p className="text-[11px] text-slate-500 mt-0.5">Days before accident</p>
                                   </div>
                                 </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
 
-            {/* Mobile View (Card List Layout) */}
-            <div className="block md:hidden space-y-4">
-              {visibleClaims.map((claim) => {
-                const isAnalyzing = analyzingId === claim.id;
-                const isExpanded = expandedClaimId === claim.id;
-                const assessment = claim.assessment;
-                const wasJustAnalyzed = sessionAnalyzedIds.includes(claim.id);
-
-                return (
-                  <div
-                    key={claim.id}
-                    className={`bg-white rounded-2xl border transition shadow-xs overflow-hidden ${
-                      wasJustAnalyzed
-                        ? 'border-indigo-500 ring-2 ring-indigo-500/20'
-                        : 'border-slate-200'
-                    }`}
-                  >
-                    {/* Card Header */}
-                    <div className="p-4 pb-3 border-b border-slate-100 flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <span className="font-bold text-slate-900 text-sm">{claim.customer_name}</span>
-                          {wasJustAnalyzed && (
-                            <span className="text-[9px] font-bold text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200">
-                              Evaluated
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-slate-500 flex items-center space-x-1 mt-0.5">
-                          <Car className="h-3 w-3 text-slate-400 shrink-0" />
-                          <span>{claim.vehicle_info}</span>
-                        </div>
-                      </div>
-
-                      {/* Risk Badge */}
-                      <div className="shrink-0">
-                        {assessment ? (
-                          <span
-                            className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                              assessment.risk_level === 'High'
-                                ? 'bg-rose-50 border-rose-200 text-rose-700'
-                                : assessment.risk_level === 'Medium'
-                                ? 'bg-amber-50 border-amber-200 text-amber-800'
-                                : 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                            }`}
-                          >
-                            {assessment.risk_level === 'High' && <AlertTriangle className="h-3 w-3 text-rose-600" />}
-                            {assessment.risk_level === 'Medium' && <AlertTriangle className="h-3 w-3 text-amber-600" />}
-                            {assessment.risk_level === 'Low' && <CheckCircle2 className="h-3 w-3 text-emerald-600" />}
-                            <span>{assessment.risk_level}</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                            <Clock className="h-3 w-3 text-slate-400" />
-                            <span>Pending</span>
-                          </span>
+                              </div>
+                            </td>
+                          </tr>
                         )}
-                      </div>
-                    </div>
-
-                    {/* Card Body */}
-                    <div className="p-4 space-y-3">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="inline-block px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-700 uppercase">
-                          {claim.incident_type}
-                        </span>
-                        <span className="font-extrabold text-slate-900 text-base">
-                          {Number(claim.claimed_amount).toLocaleString()} <span className="text-xs font-semibold text-slate-500">AED</span>
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-slate-700 leading-relaxed">
-                        {claim.description}
-                      </p>
-
-                      <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                        <div>Incident: <span className="font-semibold text-slate-800">{claim.incident_date}</span></div>
-                        <div>Policy: <span className="text-slate-600">{claim.policy_start_date}</span></div>
-                      </div>
-
-                      {/* Card Action */}
-                      <div className="pt-1">
-                        {assessment ? (
-                          <button
-                            onClick={() => setExpandedClaimId(isExpanded ? null : claim.id)}
-                            className="w-full flex items-center justify-center space-x-1 text-xs text-indigo-600 hover:text-indigo-800 font-semibold py-2 rounded-xl border border-indigo-200 bg-indigo-50/40 active:bg-indigo-50 transition"
-                          >
-                            <span>{isExpanded ? 'Hide Assessment Breakdown' : 'View Anomaly Signals'}</span>
-                            {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                          </button>
-                        ) : claim.status === 'analyzed' ? (
-                          <span className="block text-center text-xs text-slate-400 italic py-1">Historical Record</span>
-                        ) : (
-                          <button
-                            onClick={() => handleAnalyze(claim.id)}
-                            disabled={isAnalyzing}
-                            className="w-full flex items-center justify-center space-x-1.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 disabled:bg-slate-200 disabled:text-slate-400 text-white font-semibold text-xs py-2.5 rounded-xl shadow-xs transition"
-                          >
-                            {isAnalyzing ? (
-                              <>
-                                <span className="h-3.5 w-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                                <span>Running AI Screening...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Search className="h-3.5 w-3.5" />
-                                <span>Run AI Risk Analysis</span>
-                              </>
-                            )}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Mobile Expanded Signals Drawer */}
-                    {isExpanded && assessment && (
-                      <div className="p-4 bg-slate-50 border-t border-slate-200 space-y-3">
-                        <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-xs">
-                          <div className="text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center space-x-1.5">
-                            <span className="h-2 w-2 rounded-full bg-rose-500" />
-                            <span>Gemini Audit Synthesis</span>
-                          </div>
-                          <p className="text-xs text-slate-700 leading-relaxed font-normal">
-                            {assessment.reasoning}
-                          </p>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2.5">
-                          <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs">
-                            <div className="flex items-center space-x-1 text-slate-500 text-[10px] uppercase font-bold">
-                              <History className="h-3 w-3 text-indigo-600" />
-                              <span>Velocity (6M)</span>
-                            </div>
-                            <div className="text-base font-extrabold text-slate-900 mt-1">
-                              {assessment.recent_claim_count} {assessment.recent_claim_count === 1 ? 'claim' : 'claims'}
-                            </div>
-                          </div>
-
-                          <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs">
-                            <div className="flex items-center space-x-1 text-slate-500 text-[10px] uppercase font-bold">
-                              <TrendingUp className="h-3 w-3 text-amber-600" />
-                              <span>Peer Average</span>
-                            </div>
-                            <div className="text-base font-extrabold text-slate-900 mt-1">
-                              {assessment.avg_amount_similar_type.toLocaleString()} <span className="text-[10px] font-semibold text-slate-500">AED</span>
-                            </div>
-                          </div>
-
-                          <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs">
-                            <div className="flex items-center space-x-1 text-slate-500 text-[10px] uppercase font-bold">
-                              <TrendingUp className="h-3 w-3 text-rose-600" />
-                              <span>Deviation</span>
-                            </div>
-                            <div className="text-base font-extrabold text-slate-900 mt-1">
-                              {assessment.amount_vs_avg_ratio}x
-                            </div>
-                          </div>
-
-                          <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs">
-                            <div className="flex items-center space-x-1 text-slate-500 text-[10px] uppercase font-bold">
-                              <CalendarClock className="h-3 w-3 text-emerald-600" />
-                              <span>Inception Gap</span>
-                            </div>
-                            <div className="text-base font-extrabold text-slate-900 mt-1">
-                              {assessment.days_since_policy_start} days
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          </>
-        )}
+          )}
+        </div>
 
       </div>
     </div>
