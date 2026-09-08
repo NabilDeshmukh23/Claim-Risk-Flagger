@@ -45,6 +45,7 @@ app.post('/api/analyze-claim/:claimId', async (req, res) => {
       .from('claims')
       .select('id', { count: 'exact', head: true })
       .eq('customer_name', claim.customer_name)
+      .neq('id', claim.id)
       .gte('incident_date', sixMonthsAgo.toISOString().split('T')[0]);
 
     const { data: peerClaims } = await supabase
@@ -68,7 +69,7 @@ app.post('/api/analyze-claim/:claimId', async (req, res) => {
     const daysSincePolicyStart = Math.max(0, Math.round((incidentTime - policyStartTime) / (1000 * 60 * 60 * 24)));
 
     const signals = {
-      recentClaimCount: recentClaimCount || 1,
+     recentClaimCount: recentClaimCount ?? 0,
       avgAmountForSimilarType,
       thisAmount: Number(claim.claimed_amount),
       amountVsAvgRatio,
@@ -81,7 +82,7 @@ You are assisting an insurance claims reviewer by flagging claims that may warra
 Claim description (from customer): "${claim.description}"
 
 Computed risk signals for this claim:
-- Number of claims this customer has filed in the last 6 months: ${signals.recentClaimCount}
+- Number of previous claims this customer has filed in the last 6 months: ${signals.recentClaimCount}
 - Average claimed amount for similar incident type (${claim.incident_type}): ${signals.avgAmountForSimilarType} AED
 - This claim's amount: ${signals.thisAmount} AED (ratio to average: ${signals.amountVsAvgRatio}x)
 - Days between policy start date and incident date: ${signals.daysSincePolicyStart} days
