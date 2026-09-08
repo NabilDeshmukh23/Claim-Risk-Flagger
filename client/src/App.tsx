@@ -364,7 +364,7 @@ export default function App() {
                                   <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
                                     <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1.5">
                                       <span className="h-2 w-2 rounded-full bg-rose-500" />
-                                      <span>Gemini Audit Synthesis</span>
+                                      <span>Risk</span>
                                     </div>
                                     <p className="text-xs text-slate-700 leading-relaxed">
                                       {assessment.reasoning}
@@ -375,7 +375,7 @@ export default function App() {
                                     <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
                                       <div className="flex items-center space-x-1.5 text-slate-500 text-[10px] uppercase font-bold">
                                         <History className="h-3.5 w-3.5 text-indigo-600" />
-                                        <span>Velocity (6 Mos)</span>
+                                        <span>Recent Claims (6 Mos)</span>
                                       </div>
                                       <div className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
                                         {assessment.recent_claim_count} {assessment.recent_claim_count === 1 ? 'claim' : 'claims'}
@@ -386,7 +386,7 @@ export default function App() {
                                     <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
                                       <div className="flex items-center space-x-1.5 text-slate-500 text-[10px] uppercase font-bold">
                                         <TrendingUp className="h-3.5 w-3.5 text-amber-600" />
-                                        <span>Peer Baseline</span>
+                                        <span>Typical Repair Cost</span>
                                       </div>
                                       <div className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
                                         {assessment.avg_amount_similar_type.toLocaleString()} <span className="text-xs font-semibold text-slate-500">AED</span>
@@ -397,7 +397,7 @@ export default function App() {
                                     <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
                                       <div className="flex items-center space-x-1.5 text-slate-500 text-[10px] uppercase font-bold">
                                         <TrendingUp className="h-3.5 w-3.5 text-rose-600" />
-                                        <span>Deviation Ratio</span>
+                                        <span>Price Difference</span>
                                       </div>
                                       <div className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
                                         {assessment.amount_vs_avg_ratio}x
@@ -408,7 +408,7 @@ export default function App() {
                                     <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
                                       <div className="flex items-center space-x-1.5 text-slate-500 text-[10px] uppercase font-bold">
                                         <CalendarClock className="h-3.5 w-3.5 text-emerald-600" />
-                                        <span>Inception Gap</span>
+                                        <span> Days Since Policy Started</span>
                                       </div>
                                       <div className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
                                         {assessment.days_since_policy_start} days
