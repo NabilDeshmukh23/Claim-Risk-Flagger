@@ -15,7 +15,6 @@ import {
   AlertOctagon,
   ChevronDown,
   ChevronUp,
-  DollarSign
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
