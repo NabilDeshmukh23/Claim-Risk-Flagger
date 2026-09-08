@@ -147,9 +147,7 @@ export default function App() {
                   Live Engine
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5 hidden sm:block">
-                Automated motor claim triage combining deterministic SQL features with Gemini synthesis
-              </p>
+              
             </div>
           </div>
 
