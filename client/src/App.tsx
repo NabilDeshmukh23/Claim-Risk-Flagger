@@ -59,8 +59,8 @@ export default function App() {
       .select('*');
 
     if (claimsData) {
-      const merged: Claim[] = claimsData.map((c) => {
-        const match = assessmentsData?.find((a) => a.claim_id === c.id);
+      const merged: Claim[] = claimsData.map((c: any) => {
+        const match = assessmentsData?.find((a: any) => a.claim_id === c.id);
         return {
           ...c,
           assessment: match || undefined,
