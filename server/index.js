@@ -150,6 +150,28 @@ app.post('/api/reset-demo', async (req, res) => {
   }
 });
 
+app.post('/api/claim-decision/:claimId', async (req, res) => {
+  const { claimId } = req.params;
+  const { decision } = req.body; 
+
+  if (!['approved', 'escalated', 'rejected'].includes(decision)) {
+    return res.status(400).json({ error: 'Invalid decision type' });
+  }
+
+  try {
+    const { error } = await supabase
+      .from('claims')
+      .update({ status: decision })
+      .eq('id', claimId);
+
+    if (error) throw error;
+    return res.json({ success: true, status: decision });
+  } catch (err) {
+    console.error('Decision update error:', err);
+    return res.status(500).json({ error: 'Failed to record decision' });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
