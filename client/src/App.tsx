@@ -33,7 +33,7 @@ interface Claim {
   };
 }
 
-const BACKEND_URL = 'http://localhost:3001';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
 export default function App() {
   const [claims, setClaims] = useState<Claim[]>([]);

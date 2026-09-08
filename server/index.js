@@ -103,7 +103,8 @@ Respond in this exact JSON format:
       },
     });
 
-    const parsedAssessment = JSON.parse(response.text);
+    const cleanText = (response.text || '').replace(/```json|```/g, '').trim();
+    const parsedAssessment = JSON.parse(cleanText);
 
     await supabase
       .from('fraud_assessments')
@@ -133,6 +134,18 @@ Respond in this exact JSON format:
   } catch (err) {
     console.error('Analysis error:', err);
     return res.status(500).json({ error: 'Failed to complete fraud risk assessment' });
+  }
+});
+
+// Demo Reset Endpoint
+app.post('/api/reset-demo', async (req, res) => {
+  try {
+    await supabase.from('fraud_assessments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('claims').update({ status: 'pending' }).neq('status', 'pending');
+    return res.json({ success: true, message: 'All claims reset to pending review.' });
+  } catch (err) {
+    console.error('Reset error:', err);
+    return res.status(500).json({ error: 'Failed to reset demo data' });
   }
 });
 
